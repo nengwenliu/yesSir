@@ -1,0 +1,9 @@
+private void rxJavaTest3() { Observable.just("Hello", "Word") .
+subscribeOn(Schedulers.newThread())//指定 subscribe() 发生在新的线程 .
+subscribeOn(Schedulers.io())//发生在io  网络请求 耗时操作
+observeOn(AndroidSchedulers.mainThread())// 指定 Subscriber 的回调发生在主线程 .
+subscribe(new Action1<String>() { @Override public void call(String s) { Log.i(TAG, s); } });
+
+subscribe 是继承 observer 
+
+
