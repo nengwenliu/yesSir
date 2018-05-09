@@ -1,0 +1,233 @@
+WIFI连接判断
+
+public static boolean isWifiConnect(Context context) {
+    try {
+        ConnectivityManager manager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo info = manager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+        if (info != null) {
+            return info.isConnected();
+        }
+    } catch (Exception e) {
+        LogUtils.log("系统错误",e);
+        return false;
+    }
+    return false;
+}
+
+网络连接
+public static boolean  isConnect(Context context) {
+    ConnectivityManager manager = (ConnectivityManager) context
+            .getSystemService(Context.CONNECTIVITY_SERVICE);
+    NetworkInfo activeNetwork = manager.getActiveNetworkInfo();
+    if (activeNetwork != null) {
+        if (activeNetwork.isConnected()) {
+            if (activeNetwork.getType() == ConnectivityManager.TYPE_WIFI) {
+                LogUtils.log("当前WiFi连接可用 ");
+                return true;
+            } else if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE) {
+                LogUtils.log("当前移动网络连接可用 ");
+                return true;
+            }
+            return true;
+        } else {
+            LogUtils.log("当前没有网络连接，请确保你已经打开网络 ");
+            return false;
+        }
+    } else {
+        LogUtils.log("当前没有网络连接，请确保你已经打开网络 ");
+        return false;
+    }
+}
+
+----------------------------------------------------------------------
+package com.msjt.sigma.sys.service;
+
+import com.google.gson.Gson;
+import com.msjt.sigma.connect.ConnectConstant;
+
+import okhttp3.OkHttpClient;
+import retrofit2.Retrofit;
+import retrofit2.adapter.rxjava.RxJavaCallAdapterFactory;
+import retrofit2.converter.gson.GsonConverterFactory;
+import rx.schedulers.Schedulers;
+
+/**
+ * Created by CSJY on 4/19 0019.
+ */
+
+public class RequestServiceBuilder {
+
+    private static RequestServiceBuilder instance = new RequestServiceBuilder();
+
+    private RequestServiceBuilder(){
+    }
+
+    public static RequestServiceBuilder getInstant(){
+        return instance;
+    }
+
+    private  <T> T getService(Class<T> service, String url) {
+        OkHttpClient okHttpClient = new OkHttpClient.Builder()
+                .addInterceptor(new AuthInterceptor())
+                .build();
+        Retrofit.Builder builder =
+                new Retrofit.Builder()
+                        .baseUrl(url)
+                        .addConverterFactory(GsonConverterFactory.create(new Gson()))
+                        .addCallAdapterFactory(RxJavaCallAdapterFactory.createWithScheduler(Schedulers.io()))
+                        .client(okHttpClient);
+        T  t = builder.build().create(service);
+        return t;
+    }
+
+    private String getBaseUrl() {
+         return ConnectConstant.URL_BASE+"";
+    }
+
+    public  <T> T getService(Class<T> serviceClass) {
+            return getService(serviceClass, getBaseUrl());
+        }
+
+}
+--------------------------------------------------------------
+
+package com.msjt.sigma.sys.service;
+
+import android.util.Log;
+
+import com.msjt.sigma.connect.ConnectConstant;
+import com.msjt.sigma.dao.UserEntity;
+import com.msjt.sigma.log.LogUtils;
+import com.msjt.sigma.util.Constants;
+import com.msjt.sigma.util.dao.UserDBInterface;
+
+import java.io.IOException;
+
+import okhttp3.FormBody;
+import okhttp3.HttpUrl;
+import okhttp3.Interceptor;
+import okhttp3.Request;
+import okhttp3.Response;
+
+/**
+ * Created by CSJY on 4/19 0019.
+ */
+
+public class AuthInterceptor implements Interceptor {
+
+    @Override
+    public Response intercept(Chain chain) throws IOException {
+        Request originalRequest = chain.request();
+        Request request;
+
+        HttpUrl.Builder newUrlBuilder = originalRequest.url().newBuilder();
+        if (!originalRequest.url().toString().equals(ConnectConstant.URL_LOGIN)) {
+            UserEntity userEntity = UserDBInterface.userQuery();
+            if (null != userEntity) {
+                newUrlBuilder.addQueryParameter("_token_", userEntity.getToken());
+            }
+        }
+        HttpUrl modifiedUrl = newUrlBuilder.build();
+        request = originalRequest.newBuilder()
+                .url(modifiedUrl)
+                .addHeader("Content-Type", "application/json; charset=utf-8")
+                .build();
+
+        LogUtils.log("Url", "" + request.url());
+        if (originalRequest.body() instanceof FormBody) {
+            FormBody formBody = (FormBody) originalRequest.body();
+            int size = formBody.size();
+            for (int i = 0; i < size; i++) {
+                LogUtils.log("Url", formBody.name(i) + "=" + formBody.value(i));
+            }
+        }
+        return chain.proceed(request);
+    }
+}
+-----------------------------------------------------------------
+package com.msjt.sigma.home.service;
+
+import com.msjt.sigma.home.entity.LiveTimeVo;
+import com.msjt.sigma.home.entity.RequestScopeChoose;
+import com.msjt.sigma.home.entity.TbsSpecialTrainingPlanBag;
+import com.msjt.sigma.home.entity.UpdateInfoPersonVo;
+import com.msjt.sigma.sys.entity.RspData;
+
+import java.util.List;
+
+import retrofit2.http.GET;
+import retrofit2.http.POST;
+import retrofit2.http.Query;
+import rx.Observable;
+
+/**
+ * Created by Jiang on 2018/4/18. 接口类型
+ */
+
+public interface LoginRequestChooseService {
+    @GET("app/mathsGo/studentClassify/getScoreSegmentOptions")
+    Observable<RspData<List<TbsSpecialTrainingPlanBag>>> getScoreSegmentOptions();
+
+    @GET("app/mathsGo/studentClassify/getAvailableDuration")
+    Observable<RspData<List<LiveTimeVo>>> getAvailableDuration();
+
+    @GET("app/mathsGo/studentClassify/getScoreAndDuration")
+    Observable<RspData<RequestScopeChoose>> getScoreAndDuration(@Query("studentId") long studentId);
+
+    @POST("app/mathsGo/studentClassify/setScoreAndDuration")
+    Observable<RspData<LiveTimeVo>> setScoreAndDuration(@Query("studentId") long studentId,@Query("score")int score,@Query("durationIds")String uuid);
+    @POST("app/mathsGo/studentClassify/setScoreAndDurationAndBookOrder")
+    Observable<RspData<LiveTimeVo>> setScoreAndDurationAndBookOrder(@Query("query") String query);
+
+    @POST("app/studyAssistant/saveStudentInfo")
+    Observable<RspData<Object>> saveStudentInfo(@Query("studentId")String studentId,@Query("studentName")String studentName,@Query("sType")int sType,@Query("sex")int sex,@Query("parentPhone")String parentPhone);
+}
+---------------------------------------------------------------------------------------
+package com.msjt.sigma.sys.entity;
+
+
+/**
+ * Created by xiangsk on 2017/2/8.通用类
+ */
+public class RspData<T> {
+    private String FlAG_TYPE_SUCCESS = "success";
+    private String FlAG_TYPE_FAILURE = "failure";
+    public String type;
+    public String msg;
+    public String exceptionMessage;
+    public int code;
+    public T data;
+    public String message;
+    public T userdata;
+    public T obj;
+    public boolean result;
+
+    public boolean isSuccess() {
+        return FlAG_TYPE_SUCCESS.equals(type);
+    }
+
+}
+--------------------------------------------
+//请求模式 LoginRequestChooseService mRequestLiveTimeService =RequestServiceBuilder.getInstant().getService(LoginRequestChooseService.class);
+        mRequestLiveTimeService.getScoreSegmentOptions()
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeOn(Schedulers.io())
+                .subscribe(new Subscriber<RspData<List<TbsSpecialTrainingPlanBag>>>() {
+                    @Override
+                    public void onCompleted() {
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        LogUtils.log(e);
+                        localGetData();
+                    }
+
+                    @Override
+                    public void onNext(RspData<List<TbsSpecialTrainingPlanBag>> specialStudentSectionVoRspData) {
+                        if(specialStudentSectionVoRspData.obj !=null){
+                            mTbsSpecialTrainingPlanBagList = specialStudentSectionVoRspData.obj;
+                            EventBus.getDefault().post(new HomeSetDataEvent(1));
+                        }
+                    }
+                });
